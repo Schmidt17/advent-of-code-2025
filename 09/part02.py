@@ -3,6 +3,8 @@ import fire
 import numpy as np
 from itertools import combinations
 from scipy import sparse
+from tqdm import tqdm
+import time
 
 
 neig_dists = np.array([
@@ -18,6 +20,8 @@ neig_dists = np.array([
 
 
 def mark_outer_border(tile_map: sparse.lil_array, start_tile: np.ndarray):
+    bin_map = tile_map.tocsr()
+
     # convert tile coord into (row, col) format by reading it backwards:
     start_indices = start_tile[::-1]
 
@@ -28,17 +32,20 @@ def mark_outer_border(tile_map: sparse.lil_array, start_tile: np.ndarray):
     it_counter = 0
 
     while len(open_tiles) > 0:
-        print(f"{it_counter}                   ", end="\r")
+        if it_counter % 1000 == 0:
+            print(f"{it_counter}                   ", end="\r")
         current, neighs = open_tiles.pop()
         tile_map[current[0], current[1]] = 2
 
         for n in neighs:
             if tile_map[n[0], n[1]] == 0:
-                nns = get_neighbors(n, rows, cols)
+                row_st, row_end = max(n[0] - 1, 0), min(n[0] + 2, rows)
+                col_st, col_end = max(n[1] - 1, 0), min(n[1] + 2, cols)
+                touches_border = bin_map[row_st: row_end, col_st: col_end].count_nonzero() > 0
 
                 # only add n if it touches the border
-                touches_border = tile_map[nns[:, 0], nns[:, 1]] == 1
-                if touches_border.count_nonzero() > 0:
+                if touches_border:
+                    nns = get_neighbors(n, rows, cols)
                     open_tiles.append((n, nns))
 
         it_counter += 1
@@ -130,14 +137,17 @@ def main(input_path: str):
     start_tile = coords[max_y_idx].copy()
     start_tile[1] += 1
 
+    t0 = time.perf_counter()
     mark_outer_border(tile_map, start_tile)  # (inplace)
+    t1 = time.perf_counter()
+    print(f"Marking took {t1 - t0} s")
 
     print("Border + outer border tiles:", tile_map.count_nonzero())
 
     n_red = coords.shape[0]
     max_area = 0
     max_coords = None
-    for i, j in combinations(range(n_red), r=2):
+    for i, j in tqdm(combinations(range(n_red), r=2)):
         # check whether the rectangle touches the outer border
         row_st, row_end, col_st, col_end = get_rect_slice(coords[i], coords[j])
         map_slice = tile_map[row_st: row_end, col_st: col_end]
