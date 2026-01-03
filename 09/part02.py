@@ -144,20 +144,54 @@ def main(input_path: str):
 
     print("Border + outer border tiles:", tile_map.count_nonzero())
 
+    # convert to csr, since we don't need to modify the tile map anymore
+    # also, only keep the outer border, we don't need the original anymore
+    # speeds up the checks below
+    tile_map = (tile_map == 2).tocsr()
+
     n_red = coords.shape[0]
     max_area = 0
     max_coords = None
-    for i, j in tqdm(combinations(range(n_red), r=2)):
+
+    # compute areas of all possible rectangles
+    index_combinations = np.array(list(combinations(range(n_red), r=2)))
+    areas = np.empty(index_combinations.shape[0], dtype=float)
+    for comb_idx in range(index_combinations.shape[0]):
+        i, j = index_combinations[comb_idx]
+        areas[comb_idx] = np.prod(np.abs(coords[i] - coords[j] + 1))
+
+    # sort the rectangles by area
+    sort_inds = np.argsort(areas)
+
+    # check rectangles for acceptance in order of descending area
+    for comb_idx in tqdm(sort_inds[::-1]):
+        i, j = index_combinations[comb_idx]
+
         # check whether the rectangle touches the outer border
         row_st, row_end, col_st, col_end = get_rect_slice(coords[i], coords[j])
         map_slice = tile_map[row_st: row_end, col_st: col_end]
-        touches_border = (map_slice == 2).count_nonzero() > 0
+        touches_border = map_slice.count_nonzero() > 0
 
+        # the first one that is valid will be the biggest one:
         if not touches_border:
-            area = np.prod(np.abs(coords[i] - coords[j] + 1))
-            if area > max_area:
-                max_area = area
-                max_coords = (coords[i], coords[j])
+            max_area = areas[comb_idx]
+            max_coords = (coords[i], coords[j])
+
+            break
+
+    # print(areas)
+    # exit()
+    # for i, j in tqdm(combinations(range(n_red), r=2)):
+    #     # check whether the rectangle touches the outer border
+    #     row_st, row_end, col_st, col_end = get_rect_slice(coords[i], coords[j])
+    #     map_slice = tile_map[row_st: row_end, col_st: col_end]
+    #     touches_border = (map_slice == 2).count_nonzero() > 0
+
+    #     if not touches_border:
+    #         area = np.prod(np.abs(coords[i] - coords[j] + 1))
+    #         if area > max_area:
+    #             max_area = area
+    #             max_coords = (coords[i], coords[j])
 
     print(f"{max_area=}")
     print(f"{max_coords=}")
