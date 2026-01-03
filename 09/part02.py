@@ -179,20 +179,6 @@ def main(input_path: str):
 
             break
 
-    # print(areas)
-    # exit()
-    # for i, j in tqdm(combinations(range(n_red), r=2)):
-    #     # check whether the rectangle touches the outer border
-    #     row_st, row_end, col_st, col_end = get_rect_slice(coords[i], coords[j])
-    #     map_slice = tile_map[row_st: row_end, col_st: col_end]
-    #     touches_border = (map_slice == 2).count_nonzero() > 0
-
-    #     if not touches_border:
-    #         area = np.prod(np.abs(coords[i] - coords[j] + 1))
-    #         if area > max_area:
-    #             max_area = area
-    #             max_coords = (coords[i], coords[j])
-
     print(f"{max_area=}")
     print(f"{max_coords=}")
 
