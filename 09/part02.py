@@ -5,6 +5,8 @@ from itertools import combinations
 from scipy import sparse
 from tqdm import tqdm
 import time
+import pickle
+import matplotlib.pyplot as plt
 
 
 neig_dists = np.array([
@@ -116,38 +118,48 @@ def main(input_path: str):
     input_path = Path(input_path)
     coords = np.loadtxt(input_path, delimiter=",", dtype=int)
 
-    # Make sure that we have some space to draw a border around the shape.
-    # We only need to check small indices, since we can just add a spacer
-    # towards higher indices, without needing to transform coordinates
-    assert np.min(coords) > 0, "Shape has no margin towards lower indices"
+    mark_file = Path("border_map.pkl")
 
-    max_x, max_y = np.max(coords, axis=0)
-    tile_map = sparse.lil_array((max_y + 2, max_x + 2), dtype=np.uint8)
+    if mark_file.is_file():
+        with open(mark_file, "rb") as f:
+            tile_map = pickle.load(f)
+    else:
 
-    # mark the border defined by the input coordinates (inplace)
-    mark_border(tile_map, coords)
+        # Make sure that we have some space to draw a border around the shape.
+        # We only need to check small indices, since we can just add a spacer
+        # towards higher indices, without needing to transform coordinates
+        assert np.min(coords) > 0, "Shape has no margin towards lower indices"
 
-    print("Border tiles:", tile_map.count_nonzero())
+        max_x, max_y = np.max(coords, axis=0)
+        tile_map = sparse.lil_array((max_y + 2, max_x + 2), dtype=np.uint8)
 
-    # Mark a 1-tile wide outline around the border, to define the
-    # onset of the outside.
-    # Start with a tile that is definitely on the outside and touches the border,
-    # e.g. one beyond one of those with maximal y-coordinate (choose the first one here):
-    max_y_idx = np.atleast_1d(np.argmax(coords[:, 1]))[0]
-    start_tile = coords[max_y_idx].copy()
-    start_tile[1] += 1
+        # mark the border defined by the input coordinates (inplace)
+        mark_border(tile_map, coords)
 
-    t0 = time.perf_counter()
-    mark_outer_border(tile_map, start_tile)  # (inplace)
-    t1 = time.perf_counter()
-    print(f"Marking took {t1 - t0} s")
+        print("Border tiles:", tile_map.count_nonzero())
 
-    print("Border + outer border tiles:", tile_map.count_nonzero())
+        # Mark a 1-tile wide outline around the border, to define the
+        # onset of the outside.
+        # Start with a tile that is definitely on the outside and touches the border,
+        # e.g. one beyond one of those with maximal y-coordinate (choose the first one here):
+        max_y_idx = np.atleast_1d(np.argmax(coords[:, 1]))[0]
+        start_tile = coords[max_y_idx].copy()
+        start_tile[1] += 1
 
-    # convert to csr, since we don't need to modify the tile map anymore
-    # also, only keep the outer border, we don't need the original anymore
-    # speeds up the checks below
-    tile_map = (tile_map == 2).tocsr()
+        t0 = time.perf_counter()
+        mark_outer_border(tile_map, start_tile)  # (inplace)
+        t1 = time.perf_counter()
+        print(f"Marking took {t1 - t0} s")
+
+        print("Border + outer border tiles:", tile_map.count_nonzero())
+
+        # convert to csr, since we don't need to modify the tile map anymore
+        # also, only keep the outer border, we don't need the original anymore
+        # speeds up the checks below
+        tile_map = (tile_map == 2).tocsr()
+
+        with open(mark_file, "wb") as f:
+            pickle.dump(tile_map, f)
 
     n_red = coords.shape[0]
     max_area = 0
@@ -170,12 +182,21 @@ def main(input_path: str):
         # check whether the rectangle touches the outer border
         row_st, row_end, col_st, col_end = get_rect_slice(coords[i], coords[j])
         map_slice = tile_map[row_st: row_end, col_st: col_end]
-        touches_border = map_slice.count_nonzero() > 0
+
+        n_nonzero = map_slice.count_nonzero()
+        touches_border = n_nonzero > 0
 
         # the first one that is valid will be the biggest one:
         if not touches_border:
             max_area = areas[comb_idx]
             max_coords = (coords[i], coords[j])
+
+            plt.figure(figsize=(8, 8))
+            plt.plot(coords[:, 0], coords[:, 1])
+            plt.plot([col_st, col_end - 1, col_end - 1, col_st, col_st],
+                     [row_st, row_st, row_end - 1, row_end - 1, row_st])
+            plt.suptitle(areas[comb_idx])
+            plt.show()
 
             break
 
